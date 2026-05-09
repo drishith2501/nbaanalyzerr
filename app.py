@@ -5,13 +5,34 @@ Open: http://localhost:5000
 """
 
 import os, json, time, traceback, datetime
-import pandas as pd
-import numpy as np
-import joblib
-
 from flask import Flask, render_template, request, jsonify
-
 import config
+
+# Defer heavy imports to avoid slow startup
+_pd = None
+_np = None
+_joblib = None
+
+def _ensure_pandas():
+    global _pd
+    if _pd is None:
+        import pandas as pd
+        _pd = pd
+    return _pd
+
+def _ensure_numpy():
+    global _np
+    if _np is None:
+        import numpy as np
+        _np = np
+    return _np
+
+def _ensure_joblib():
+    global _joblib
+    if _joblib is None:
+        import joblib
+        _joblib = joblib
+    return _joblib
 
 app = Flask(__name__)
 
@@ -97,6 +118,7 @@ def _fetch_season_stats(season: str = "2025-26") -> pd.DataFrame:
 
 
 def _load_model():
+    joblib = _ensure_joblib()
     artifact = joblib.load(config.MODEL_FILE)
     # Support both old format {model, features} and new {pipeline, features}
     pipeline = artifact.get("pipeline") or artifact.get("model")
@@ -107,7 +129,10 @@ def _load_model():
 def _build_feature_vector(home_stats: dict, away_stats: dict,
                            home_rest: int, away_rest: int,
                            home_seed: int, away_seed: int,
-                           features: list) -> pd.DataFrame:
+                           features: list):
+    pd = _ensure_pandas()
+    np = _ensure_numpy()
+    
     row = {}
     for feat in config.TEAM_FEATURES:
         row[f"{feat}_DIFF"] = (home_stats.get(feat) or 0) - (away_stats.get(feat) or 0)
@@ -173,6 +198,23 @@ def health():
 
 @app.route("/")
 def index():
+    is_vercel = os.environ.get("VERCEL")
+    
+    # On Vercel: skip team loading, use hardcoded minimal list
+    if is_vercel:
+        minimal_teams = [
+            {"abbr": "LAL", "name": "Los Angeles Lakers"},
+            {"abbr": "DEN", "name": "Denver Nuggets"},
+            {"abbr": "BOS", "name": "Boston Celtics"},
+            {"abbr": "MIA", "name": "Miami Heat"},
+            {"abbr": "OKC", "name": "Oklahoma City Thunder"},
+            {"abbr": "GSW", "name": "Golden State Warriors"},
+            {"abbr": "PHX", "name": "Phoenix Suns"},
+            {"abbr": "DAL", "name": "Dallas Mavericks"},
+        ]
+        return render_template("index.html", teams=minimal_teams, model_ready=True)
+    
+    # Locally: load full teams list
     global ALL_TEAMS, ABB_TO_NAME
     if ALL_TEAMS is None:
         ALL_TEAMS = _get_all_teams()
