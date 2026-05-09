@@ -146,16 +146,19 @@ def api_upcoming():
 
         model_ready = os.path.exists(config.MODEL_FILE) and os.path.exists(config.SCALER_FILE)
 
-        from upcoming_games import get_upcoming_playoff_games
+        # Demo data for quick fallback
+        demo_games = [
+            {"home_abbr": "LAL", "away_abbr": "DEN", "game_time": "May 9, 7:30 PM ET", "date_label": "Thursday, May 9", "status": "Upcoming"},
+            {"home_abbr": "BOS", "away_abbr": "MIA", "game_time": "May 9, 9:00 PM ET", "date_label": "Thursday, May 9", "status": "Upcoming"},
+        ]
+
         try:
+            from upcoming_games import get_upcoming_playoff_games
             raw_games = get_upcoming_playoff_games(days_ahead=3)
+            print(f"  ✓ Fetched {len(raw_games)} real games from NBA API")
         except Exception as api_exc:
-            print(f"  NBA API error: {api_exc}. Using demo data.")
-            # Fallback demo data for Vercel deployments
-            raw_games = [
-                {"home_abbr": "LAL", "away_abbr": "DEN", "game_time": "May 9, 7:30 PM ET"},
-                {"home_abbr": "BOS", "away_abbr": "MIA", "game_time": "May 9, 9:00 PM ET"},
-            ]
+            print(f"  ✗ NBA API error (using demo data): {api_exc}")
+            raw_games = demo_games
 
         enriched = []
         for g in raw_games:
@@ -188,6 +191,7 @@ def api_upcoming():
 
     except Exception as exc:
         traceback.print_exc()
+        # Even on error, return empty games list with 200 status
         return jsonify({"error": str(exc), "games": []}), 200
 
 
