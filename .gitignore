@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+.venv/
+env/
+ENV/
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Project specific
+data/raw_*.csv
+# (You can leave processed_dataset.csv if you want the deployed model to use it,
+# but usually it's better to push the trained models instead of raw data)

@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>NBA Playoff Predictor</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;600;700;800;900&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root{--bg:#050a14;--surface:rgba(16,29,53,0.7);--card:rgba(21,34,56,0.75);--border:rgba(29,52,97,0.6);--nba-blue:#1d428a;--nba-red:#c8102e;--accent:#c8102e;--green:#22c55e;--red:#ef4444;--gold:#fbbf24;--muted:#94a3b8;--text:#f8fafc;--radius:16px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Outfit',sans-serif;background-color:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+#bg-layer{position:fixed;inset:-5%;z-index:0;background-image:url('/static/bg.png');background-size:cover;background-position:center;animation:kenburns 30s ease-in-out infinite alternate;pointer-events:none}
+@keyframes kenburns{0%{transform:scale(1) translate(0,0)}100%{transform:scale(1.1) translate(-2%,2%)}}
+#dust-canvas{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:0.6}
+.wrap{position:relative;z-index:1;max-width:1100px;margin:0 auto;padding:0 20px 80px}
+header{text-align:center;padding:50px 20px 36px}
+.badge{display:inline-flex;align-items:center;gap:8px;background:rgba(29,66,138,.15);border:1px solid rgba(29,66,138,.4);padding:5px 16px;border-radius:100px;margin-bottom:18px;font-size:13px;font-weight:600;color:#5b8def}
+h1{font-family:'Bebas Neue',sans-serif;font-size:clamp(2.8rem,7vw,4.5rem);font-weight:400;line-height:1;margin-bottom:10px;letter-spacing:.04em;text-transform:uppercase}
+h1 span{background:linear-gradient(135deg,#c8102e,#e8304f);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+header p{color:var(--muted);font-size:1rem;max-width:480px;margin:0 auto}
+.nba-logo-header{width:64px;height:64px;margin-bottom:12px;filter:drop-shadow(0 0 12px rgba(29,66,138,.5))}
+
+/* tabs */
+.tabs{display:flex;gap:8px;margin-bottom:28px;background:var(--surface);backdrop-filter:blur(10px);padding:6px;border-radius:12px;border:1px solid var(--border)}
+.tab{flex:1;padding:11px;border:none;border-radius:9px;background:transparent;color:var(--muted);font-family:'Bebas Neue',sans-serif;font-size:16px;font-weight:400;cursor:pointer;transition:all .2s;letter-spacing:.06em;text-transform:uppercase}
+.tab.active{background:linear-gradient(135deg,#1d428a,#2454a8);color:#fff;box-shadow:0 4px 16px rgba(29,66,138,.4)}
+
+/* status */
+.status{display:flex;align-items:center;gap:10px;justify-content:center;padding:11px 20px;border-radius:12px;margin-bottom:24px;font-size:13px;font-weight:500}
+.status.ok{background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);color:#86efac}
+.status.err{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);color:#fca5a5}
+.dot{width:8px;height:8px;border-radius:50%}
+.dot.g{background:var(--green);animation:pulse 2s infinite}
+.dot.r{background:var(--red)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+/* section */
+.section{display:none}
+.section.active{display:block}
+
+/* upcoming games */
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+.section-title{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.refresh-btn{display:flex;align-items:center;gap:6px;background:rgba(249,115,22,.12);border:1px solid rgba(249,115,22,.25);color:var(--accent);font-family:'Outfit',sans-serif;font-size:13px;font-weight:600;padding:8px 16px;border-radius:8px;cursor:pointer;transition:all .2s}
+.refresh-btn:hover{background:rgba(249,115,22,.2)}
+
+/* game cards grid */
+.games-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:20px}
+
+/* single game card */
+.game-card{background:var(--card);backdrop-filter:blur(10px);border:1px solid var(--border);border-radius:var(--radius);padding:24px;transition:transform .2s,box-shadow .2s;position:relative;overflow:hidden}
+.game-card:hover{transform:translateY(-3px);box-shadow:0 12px 32px rgba(0,0,0,.4)}
+.game-card.live{border-color:rgba(249,115,22,.4)}
+.game-card.live::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(249,115,22,.04),transparent);pointer-events:none}
+.live-badge{display:inline-flex;align-items:center;gap:5px;background:rgba(249,115,22,.15);border:1px solid rgba(249,115,22,.4);color:var(--accent);font-size:11px;font-weight:700;padding:3px 10px;border-radius:100px;margin-bottom:12px}
+.live-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);animation:pulse 1s infinite}
+.date-label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:14px}
+.matchup{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:10px;margin-bottom:16px}
+.team-side{text-align:center}
+.team-logo{width:56px;height:56px;object-fit:contain;margin:0 auto 6px;filter:drop-shadow(0 2px 8px rgba(0,0,0,.4));transition:transform .2s}
+.game-card:hover .team-logo{transform:scale(1.1)}
+.team-abbr{font-family:'Bebas Neue',sans-serif;font-size:26px;font-weight:400;letter-spacing:.06em}
+.team-name{font-size:11px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.team-tag{font-size:9px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.06em}
+.at-sign{font-family:'Bebas Neue',sans-serif;font-size:18px;font-weight:400;color:var(--muted);opacity:.6}
+
+/* prob bar */
+.prob-row{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.prob-bar-outer{flex:1;height:10px;background:rgba(200,16,46,.2);border-radius:100px;overflow:hidden}
+.prob-bar-inner{height:100%;background:linear-gradient(90deg,#1d428a,#2a5cc7);border-radius:100px;transition:width 1s cubic-bezier(.4,0,.2,1)}
+.prob-pcts{display:flex;justify-content:space-between;font-size:13px;font-weight:700}
+.pct-home{color:var(--green)}
+.pct-away{color:var(--red)}
+.winner-line{text-align:center;font-size:12px;color:var(--muted);margin-top:8px}
+.winner-line strong{color:var(--gold);font-weight:700}
+.no-pred{text-align:center;color:var(--muted);font-size:12px;padding:8px 0}
+
+/* loading skeleton */
+.skeleton{background:linear-gradient(90deg,var(--surface) 25%,var(--card) 50%,var(--surface) 75%);background-size:200%;border-radius:8px;animation:shimmer 1.5s infinite}
+@keyframes shimmer{0%{background-position:200%}100%{background-position:-200%}}
+.skel-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:24px;height:180px}
+
+/* empty state */
+.empty{text-align:center;padding:60px 20px;color:var(--muted)}
+.empty .icon{font-size:48px;margin-bottom:16px}
+.empty h3{font-size:18px;font-weight:700;color:var(--text);margin-bottom:8px}
+
+/* manual predict form */
+.form-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:32px;margin-bottom:24px}
+.teams-row{display:grid;grid-template-columns:1fr auto 1fr;gap:16px;align-items:center;margin-bottom:24px}
+@media(max-width:600px){.teams-row{grid-template-columns:1fr}}
+.vs-ball{background:linear-gradient(135deg,var(--accent),var(--gold));color:#000;font-weight:900;font-size:15px;width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 0 20px rgba(249,115,22,.4);margin:0 auto}
+.field label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;display:block;margin-bottom:6px}
+select,input[type=number]{width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:'Outfit',sans-serif;font-size:14px;font-weight:500;padding:11px 14px;border-radius:10px;outline:none;transition:border-color .2s,box-shadow .2s;appearance:none}
+select:focus,input[type=number]:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(249,115,22,.15)}
+.sel-wrap{position:relative}
+.sel-wrap::after{content:"▾";position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none}
+.ctx-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+.predict-btn{width:100%;padding:15px;border:none;border-radius:12px;background:linear-gradient(135deg,#1d428a,#2a5cc7);color:#fff;font-family:'Bebas Neue',sans-serif;font-size:20px;font-weight:400;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;transition:transform .15s,box-shadow .15s;box-shadow:0 4px 20px rgba(29,66,138,.4);display:flex;align-items:center;justify-content:center;gap:10px}
+.predict-btn:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 8px 28px rgba(29,66,138,.55)}
+.predict-btn:disabled{opacity:.5;cursor:not-allowed}
+
+/* manual result */
+#manual-result{display:none;margin-top:24px}
+.result-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:32px;text-align:center}
+.r-label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.09em;margin-bottom:10px}
+.r-winner{font-size:clamp(1.6rem,4vw,2.4rem);font-weight:900;background:linear-gradient(135deg,#f97316,#fbbf24);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:6px}
+.r-conf{color:var(--muted);font-size:14px;margin-bottom:20px}
+.r-conf span{color:var(--green);font-weight:700}
+.r-bar-outer{height:24px;background:rgba(239,68,68,.2);border-radius:100px;overflow:hidden;margin:12px 0}
+.r-bar-inner{height:100%;background:linear-gradient(90deg,#22c55e,#16a34a);border-radius:100px;transition:width 1.2s cubic-bezier(.4,0,.2,1)}
+.r-pcts{display:flex;justify-content:space-between;font-size:18px;font-weight:800}
+.r-pct-h{color:var(--green)}
+.r-pct-a{color:var(--red)}
+
+/* spinner */
+.spinner{width:18px;height:18px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+#toast{display:none;position:fixed;bottom:28px;left:50%;transform:translateX(-50%);background:#7f1d1d;border:1px solid #ef4444;color:#fecaca;padding:12px 22px;border-radius:10px;font-size:13px;font-weight:500;z-index:999;max-width:440px;text-align:center}
+</style>
+</head>
+<body>
+<div id="bg-layer"></div>
+<canvas id="dust-canvas"></canvas>
+
+<div class="wrap">
+  <header>
+    <img src="https://cdn.nba.com/logos/leagues/logo-nba.svg" alt="NBA" class="nba-logo-header" onerror="this.style.display='none'">
+    <div class="badge">AI Powered Playoff Predictions</div>
+    <h1>NBA Playoff<br><span>Game Predictor</span></h1>
+    <p>Live predictions for upcoming playoff matchups using 10 seasons of advanced stats.</p>
+  </header>
+
+  {% if model_ready %}
+  <div class="status ok"><div class="dot g"></div>Model loaded — predictions ready</div>
+  {% else %}
+  <div class="status err"><div class="dot r"></div>Model not trained. Run <code style="background:rgba(0,0,0,.3);padding:2px 8px;border-radius:4px;font-size:12px">python run_pipeline.py</code> first, then refresh.</div>
+  {% endif %}
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab active" id="tab-upcoming" onclick="switchTab('upcoming')">📅 Upcoming Games</button>
+    <button class="tab" id="tab-manual" onclick="switchTab('manual')">🎯 Manual Prediction</button>
+  </div>
+
+  <!-- ── UPCOMING GAMES TAB ── -->
+  <div class="section active" id="sec-upcoming">
+    <div class="section-header">
+      <span class="section-title" id="games-count-label">Loading upcoming playoff games…</span>
+      <button class="refresh-btn" onclick="loadUpcoming(true)" id="refresh-btn">
+        <span id="refresh-icon">↻</span> Refresh
+      </button>
+    </div>
+    <div class="games-grid" id="games-grid">
+      <!-- skeletons -->
+      <div class="skel-card"><div class="skeleton" style="height:100%;border-radius:8px"></div></div>
+      <div class="skel-card"><div class="skeleton" style="height:100%;border-radius:8px"></div></div>
+      <div class="skel-card"><div class="skeleton" style="height:100%;border-radius:8px"></div></div>
+    </div>
+  </div>
+
+  <!-- ── MANUAL PREDICT TAB ── -->
+  <div class="section" id="sec-manual">
+    <div class="form-card">
+      <div class="section-header" style="margin-bottom:22px">
+        <span class="section-title">Configure Custom Matchup</span>
+        <div class="sel-wrap" style="width:160px">
+          <select id="m-season">
+            <option value="2025-26">2025-26</option>
+            <option value="2024-25">2024-25</option>
+            <option value="2023-24">2023-24</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="teams-row">
+        <div>
+          <div class="field">
+            <label>🏠 Home Team</label>
+            <div class="sel-wrap"><select id="m-home">{% for t in teams %}<option value="{{t.abbr}}">{{t.name}}</option>{% endfor %}</select></div>
+          </div>
+          <div class="ctx-grid">
+            <div class="field"><label>Rest Days</label><input id="m-home-rest" type="number" min="0" max="10" value="2"/></div>
+            <div class="field"><label>Seed</label><input id="m-home-seed" type="number" min="1" max="8" value="1"/></div>
+          </div>
+        </div>
+        <div class="vs-ball">VS</div>
+        <div>
+          <div class="field">
+            <label>✈️ Away Team</label>
+            <div class="sel-wrap"><select id="m-away">{% for t in teams %}<option value="{{t.abbr}}" {% if loop.index==2 %}selected{% endif %}>{{t.name}}</option>{% endfor %}</select></div>
+          </div>
+          <div class="ctx-grid">
+            <div class="field"><label>Rest Days</label><input id="m-away-rest" type="number" min="0" max="10" value="2"/></div>
+            <div class="field"><label>Seed</label><input id="m-away-seed" type="number" min="1" max="8" value="8"/></div>
+          </div>
+        </div>
+      </div>
+
+      <button class="predict-btn" id="m-btn" onclick="manualPredict()" {% if not model_ready %}disabled{% endif %}>
+        <div class="spinner" id="m-spinner"></div>
+        <span id="m-btn-text">🔮 Predict Winner</span>
+      </button>
+    </div>
+
+    <div id="manual-result">
+      <div class="result-card">
+        <div class="r-label">Predicted Winner</div>
+        <div class="r-winner" id="r-winner"></div>
+        <div class="r-conf">Confidence: <span id="r-conf"></span></div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:6px">
+          <span id="r-home-lbl"></span><span id="r-away-lbl"></span>
+        </div>
+        <div class="r-bar-outer"><div class="r-bar-inner" id="r-bar" style="width:50%"></div></div>
+        <div class="r-pcts"><span class="r-pct-h" id="r-hp"></span><span class="r-pct-a" id="r-ap"></span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+function switchTab(tab){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.getElementById('tab-'+tab).classList.add('active');
+  document.getElementById('sec-'+tab).classList.add('active');
+}
+
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.style.display='block';
+  setTimeout(()=>t.style.display='none',5000);
+}
+
+function teamColor(abbr){
+  const colors={BOS:'#007a33',MIA:'#98002e',NYK:'#f58426',PHI:'#006bb6',MIL:'#00471b',CLE:'#860038',IND:'#002d62',ORL:'#0077c0',OKC:'#007ac1',DEN:'#0e2240',MIN:'#236192',DAL:'#00538c',LAC:'#c8102e',GSW:'#1d428a',PHX:'#1d1160',NOP:'#0c2340',SAC:'#5a2d81',MEM:'#5d76a9',HOU:'#ce1141',LAL:'#552583',SAS:'#c4ced4',UTA:'#002b5c',POR:'#e03a3e',ATL:'#e03a3e',BKN:'#ffffff',CHI:'#ce1141',CHA:'#00788c',DET:'#c8102e',WAS:'#002b5c',TOR:'#ce1141'};
+  return colors[abbr]||'#1d428a';
+}
+
+const TEAM_IDS={ATL:1610612737,BOS:1610612738,BKN:1610612751,CHA:1610612766,CHI:1610612741,CLE:1610612739,DAL:1610612742,DEN:1610612743,DET:1610612765,GSW:1610612744,HOU:1610612745,IND:1610612754,LAC:1610612746,LAL:1610612747,MEM:1610612763,MIA:1610612748,MIL:1610612749,MIN:1610612750,NOP:1610612740,NYK:1610612752,OKC:1610612760,ORL:1610612753,PHI:1610612755,PHX:1610612756,POR:1610612757,SAC:1610612758,SAS:1610612759,TOR:1610612761,UTA:1610612762,WAS:1610612764};
+
+function teamLogo(abbr){
+  const id=TEAM_IDS[abbr];
+  if(!id) return '';
+  return `https://cdn.nba.com/logos/nba/${id}/primary/L/logo.svg`;
+}
+
+function buildGameCard(g){
+  const hasPred=g.predicted;
+  const isLive=g.live;
+  const homeColor=teamColor(g.home_abbr);
+  const awayColor=teamColor(g.away_abbr);
+  const favHome=hasPred && g.prob_home>=50;
+
+  return `
+  <div class="game-card ${isLive?'live':''}">
+    ${isLive?'<div class="live-badge"><div class="live-dot"></div>LIVE</div>':''}
+    <div class="date-label">${g.date_label} &middot; ${g.status||'Upcoming'}</div>
+    <div class="matchup">
+      <div class="team-side">
+        <img class="team-logo" src="${teamLogo(g.home_abbr)}" alt="${g.home_abbr}" onerror="this.style.display='none'">
+        <div class="team-abbr" style="color:${homeColor}">${g.home_abbr}</div>
+        <div class="team-name">${g.home_name}</div>
+        <div class="team-tag">Home</div>
+      </div>
+      <div class="at-sign">VS</div>
+      <div class="team-side">
+        <img class="team-logo" src="${teamLogo(g.away_abbr)}" alt="${g.away_abbr}" onerror="this.style.display='none'">
+        <div class="team-abbr" style="color:${awayColor}">${g.away_abbr}</div>
+        <div class="team-name">${g.away_name}</div>
+        <div class="team-tag">Away</div>
+      </div>
+    </div>
+    ${hasPred ? `
+    <div class="prob-row">
+      <div class="prob-bar-outer">
+        <div class="prob-bar-inner" style="width:${g.prob_home}%"></div>
+      </div>
+    </div>
+    <div class="prob-pcts">
+      <span class="pct-home">${g.prob_home}%</span>
+      <span class="pct-away">${g.prob_away}%</span>
+    </div>
+    <div class="winner-line">Predicted: <strong>${g.winner}</strong> (${g.confidence}% confidence)</div>
+    ` : `<div class="no-pred">${g.error||'No prediction available'}</div>`}
+  </div>`;
+}
+
+async function loadUpcoming(force=false){
+  const grid=document.getElementById('games-grid');
+  const label=document.getElementById('games-count-label');
+  const icon=document.getElementById('refresh-icon');
+
+  // show skeletons
+  grid.innerHTML='<div class="skel-card"><div class="skeleton" style="height:100%;border-radius:8px"></div></div>'.repeat(3);
+  label.textContent='Fetching upcoming playoff games…';
+  icon.style.animation='spin .7s linear infinite';
+  document.getElementById('refresh-btn').disabled=true;
+
+  try{
+    const url='/api/upcoming'+(force?'?force=1':'');
+    const res=await fetch(url);
+    const data=await res.json();
+    icon.style.animation='';
+    document.getElementById('refresh-btn').disabled=false;
+
+    if(data.error){showToast('Error: '+data.error); grid.innerHTML='<div class="empty"><div class="icon">⚠️</div><h3>Failed to load games</h3><p>'+data.error+'</p></div>'; return;}
+
+    const games=data.games||[];
+    label.textContent=games.length===0?'No upcoming playoff games found in the next 10 days':`${games.length} upcoming playoff game${games.length!==1?'s':''} found`+(data.cached?' (cached)':'');
+
+    if(games.length===0){
+      grid.innerHTML=`<div class="empty" style="grid-column:1/-1">
+        <div class="icon">🏆</div>
+        <h3>No upcoming games found</h3>
+        <p>No playoff games scheduled in the next 10 days. The NBA Playoffs may be between rounds.</p>
+      </div>`;
+      return;
+    }
+
+    grid.innerHTML=games.map(buildGameCard).join('');
+
+    // animate bars
+    setTimeout(()=>{
+      document.querySelectorAll('.prob-bar-inner').forEach(bar=>{
+        const w=bar.style.width; bar.style.width='0'; setTimeout(()=>bar.style.width=w,50);
+      });
+    },100);
+
+  }catch(e){
+    icon.style.animation='';
+    document.getElementById('refresh-btn').disabled=false;
+    showToast('Network error: '+e.message);
+    grid.innerHTML='<div class="empty" style="grid-column:1/-1"><div class="icon">⚠️</div><h3>Network error</h3><p>Is the server running?</p></div>';
+  }
+}
+
+async function manualPredict(){
+  const btn=document.getElementById('m-btn');
+  const spinner=document.getElementById('m-spinner');
+  const btnText=document.getElementById('m-btn-text');
+  btn.disabled=true; spinner.style.display='block'; btnText.textContent='Predicting…';
+
+  const payload={
+    home:document.getElementById('m-home').value,
+    away:document.getElementById('m-away').value,
+    home_rest:+document.getElementById('m-home-rest').value,
+    away_rest:+document.getElementById('m-away-rest').value,
+    home_seed:+document.getElementById('m-home-seed').value,
+    away_seed:+document.getElementById('m-away-seed').value,
+    season:document.getElementById('m-season').value,
+  };
+
+  try{
+    const res=await fetch('/api/predict',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const d=await res.json();
+    if(!res.ok){showToast(d.error||'Prediction failed');return;}
+
+    document.getElementById('r-winner').textContent=d.winner;
+    document.getElementById('r-conf').textContent=d.confidence+'%';
+    document.getElementById('r-home-lbl').textContent='🏠 '+payload.home;
+    document.getElementById('r-away-lbl').textContent='✈ '+payload.away;
+    document.getElementById('r-hp').textContent=d.prob_home+'%';
+    document.getElementById('r-ap').textContent=d.prob_away+'%';
+    const bar=document.getElementById('r-bar');
+    bar.style.width='0'; setTimeout(()=>bar.style.width=d.prob_home+'%',100);
+    document.getElementById('manual-result').style.display='block';
+    document.getElementById('manual-result').scrollIntoView({behavior:'smooth'});
+  }catch(e){showToast('Error: '+e.message);}
+  finally{btn.disabled=false;spinner.style.display='none';btnText.textContent='🔮 Predict Winner';}
+}
+
+// Load upcoming on page ready
+loadUpcoming();
+
+// ── Cinematic floating dust animation ──
+(function(){
+  const canvas=document.getElementById('dust-canvas');
+  const ctx=canvas.getContext('2d');
+  let W,H;
+  function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
+  resize();
+  window.addEventListener('resize',resize);
+
+  const particles=[];
+  for(let i=0;i<80;i++){
+    particles.push({
+      x:Math.random()*W,
+      y:Math.random()*H,
+      r:Math.random()*2+0.5,
+      vx:(Math.random()-0.5)*0.3,
+      vy:(Math.random()-0.5)*0.3,
+      alpha:Math.random()*0.5+0.1
+    });
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    particles.forEach(p=>{
+      p.x+=p.vx; p.y+=p.vy;
+      if(p.x<0||p.x>W) p.vx*=-1;
+      if(p.y<0||p.y>H) p.vy*=-1;
+      
+      ctx.beginPath();
+      ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+      ctx.fillStyle=`rgba(255,255,255,${p.alpha})`;
+      ctx.fill();
+    });
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+</script>
+</body>
+</html>
