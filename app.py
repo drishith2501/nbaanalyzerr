@@ -166,6 +166,11 @@ def _predict_game(home_abbr: str, away_abbr: str,
 
 # ── routes ─────────────────────────────────────────────────────────────────────
 
+@app.route("/health")
+def health():
+    """Health check endpoint - responds immediately."""
+    return jsonify({"status": "ok"}), 200
+
 @app.route("/")
 def index():
     global ALL_TEAMS, ABB_TO_NAME
@@ -238,7 +243,9 @@ def api_upcoming():
         enriched = []
         for g in raw_games:
             entry = dict(g)
-            if model_ready:
+            # Skip predictions on Vercel to avoid timeouts
+            is_vercel = os.environ.get("VERCEL")
+            if model_ready and not is_vercel:
                 try:
                     pred = _predict_game(
                         g["home_abbr"], g["away_abbr"],
@@ -253,7 +260,12 @@ def api_upcoming():
                     entry["error"] = str(exc)
             else:
                 entry["predicted"] = False
-                entry["error"] = "Model not trained yet."
+                if is_vercel:
+                    entry["error"] = "Predictions temporarily unavailable (loading...)"
+                elif not model_ready:
+                    entry["error"] = "Model not trained yet."
+                else:
+                    entry["error"] = "Unable to generate prediction"
 
             entry["home_name"] = entry.get("home_name") or ABB_TO_NAME.get(g["home_abbr"], g["home_abbr"])
             entry["away_name"] = entry.get("away_name") or ABB_TO_NAME.get(g["away_abbr"], g["away_abbr"])
