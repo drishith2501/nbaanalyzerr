@@ -146,7 +146,7 @@ def api_upcoming():
         model_ready = os.path.exists(config.MODEL_FILE) and os.path.exists(config.SCALER_FILE)
 
         from upcoming_games import get_upcoming_playoff_games
-        raw_games = get_upcoming_playoff_games(days_ahead=10)
+        raw_games = get_upcoming_playoff_games(days_ahead=3)
 
         enriched = []
         for g in raw_games:

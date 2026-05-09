@@ -51,7 +51,7 @@ MODEL_FILE           = os.path.join(MODEL_DIR, "logistic_regression_model.joblib
 SCALER_FILE          = os.path.join(MODEL_DIR, "scaler.joblib")
 
 # ── nba_api rate-limit safety delay (seconds between requests) ─────────────────
-REQUEST_DELAY = 1.5
+REQUEST_DELAY = 0.5
 
 # ── Logistic Regression hyper-params ──────────────────────────────────────────
 LR_C          = 1.0      # inverse regularisation strength
