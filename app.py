@@ -15,13 +15,61 @@ import config
 
 app = Flask(__name__)
 
-# ── teams lookup ───────────────────────────────────────────────────────────────
-from nba_api.stats.static import teams as nba_teams_static
-ALL_TEAMS = sorted(
-    [{"abbr": t["abbreviation"], "name": t["full_name"]} for t in nba_teams_static.get_teams()],
-    key=lambda x: x["name"],
-)
-ABB_TO_NAME = {t["abbr"]: t["name"] for t in ALL_TEAMS}
+# ── teams lookup (lazy-loaded) ────────────────────────────────────────────────
+_TEAMS_CACHE = None
+
+def _get_all_teams():
+    """Lazy-load NBA teams to avoid startup delay on Vercel."""
+    global _TEAMS_CACHE
+    if _TEAMS_CACHE is not None:
+        return _TEAMS_CACHE
+    
+    try:
+        from nba_api.stats.static import teams as nba_teams_static
+        _TEAMS_CACHE = sorted(
+            [{"abbr": t["abbreviation"], "name": t["full_name"]} for t in nba_teams_static.get_teams()],
+            key=lambda x: x["name"],
+        )
+    except Exception as e:
+        print(f"Failed to load NBA teams: {e}")
+        # Fallback to hardcoded teams
+        _TEAMS_CACHE = [
+            {"abbr": "ATL", "name": "Atlanta Hawks"},
+            {"abbr": "BOS", "name": "Boston Celtics"},
+            {"abbr": "BKN", "name": "Brooklyn Nets"},
+            {"abbr": "CHA", "name": "Charlotte Hornets"},
+            {"abbr": "CHI", "name": "Chicago Bulls"},
+            {"abbr": "CLE", "name": "Cleveland Cavaliers"},
+            {"abbr": "DAL", "name": "Dallas Mavericks"},
+            {"abbr": "DEN", "name": "Denver Nuggets"},
+            {"abbr": "DET", "name": "Detroit Pistons"},
+            {"abbr": "GSW", "name": "Golden State Warriors"},
+            {"abbr": "HOU", "name": "Houston Rockets"},
+            {"abbr": "IND", "name": "Indiana Pacers"},
+            {"abbr": "LAC", "name": "LA Clippers"},
+            {"abbr": "LAL", "name": "Los Angeles Lakers"},
+            {"abbr": "MEM", "name": "Memphis Grizzlies"},
+            {"abbr": "MIA", "name": "Miami Heat"},
+            {"abbr": "MIL", "name": "Milwaukee Bucks"},
+            {"abbr": "MIN", "name": "Minnesota Timberwolves"},
+            {"abbr": "NOP", "name": "New Orleans Pelicans"},
+            {"abbr": "NYK", "name": "New York Knicks"},
+            {"abbr": "OKC", "name": "Oklahoma City Thunder"},
+            {"abbr": "ORL", "name": "Orlando Magic"},
+            {"abbr": "PHI", "name": "Philadelphia 76ers"},
+            {"abbr": "PHX", "name": "Phoenix Suns"},
+            {"abbr": "POR", "name": "Portland Trail Blazers"},
+            {"abbr": "SAC", "name": "Sacramento Kings"},
+            {"abbr": "SAS", "name": "San Antonio Spurs"},
+            {"abbr": "TOR", "name": "Toronto Raptors"},
+            {"abbr": "UTA", "name": "Utah Jazz"},
+            {"abbr": "WAS", "name": "Washington Wizards"},
+        ]
+    
+    return _TEAMS_CACHE
+
+ALL_TEAMS = None  # Will be set in routes
+ABB_TO_NAME = None  # Will be set in routes
 
 # ── in-memory caches ───────────────────────────────────────────────────────────
 _STATS_CACHE: dict = {}
@@ -120,6 +168,11 @@ def _predict_game(home_abbr: str, away_abbr: str,
 
 @app.route("/")
 def index():
+    global ALL_TEAMS, ABB_TO_NAME
+    if ALL_TEAMS is None:
+        ALL_TEAMS = _get_all_teams()
+        ABB_TO_NAME = {t["abbr"]: t["name"] for t in ALL_TEAMS}
+    
     model_ready = os.path.exists(config.MODEL_FILE) and os.path.exists(config.SCALER_FILE)
     return render_template("index.html", teams=ALL_TEAMS, model_ready=model_ready)
 
@@ -132,6 +185,12 @@ def api_upcoming():
     Results cached for 15 minutes.
     """
     try:
+        # Ensure teams are loaded
+        global ALL_TEAMS, ABB_TO_NAME
+        if ABB_TO_NAME is None:
+            ALL_TEAMS = _get_all_teams()
+            ABB_TO_NAME = {t["abbr"]: t["name"] for t in ALL_TEAMS}
+        
         force = request.args.get("force") == "1"
         now   = datetime.datetime.utcnow()
         season = request.args.get("season", "2025-26")
