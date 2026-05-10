@@ -4,7 +4,7 @@ Run:  python app.py
 Open: http://localhost:5000
 """
 
-import os, json, time, traceback, datetime
+import os, json, time, traceback, datetime, sys, joblib
 from flask import Flask, render_template, request, jsonify
 import config
 import nba_utils
@@ -151,12 +151,28 @@ def _fetch_season_stats(season: str = "2025-26") -> pd.DataFrame:
 
 
 def _load_model():
-    joblib = _ensure_joblib()
-    artifact = joblib.load(config.MODEL_FILE)
-    # Support both old format {model, features} and new {pipeline, features}
-    pipeline = artifact.get("pipeline") or artifact.get("model")
-    features = artifact["features"]
-    return pipeline, features
+    try:
+        if not os.path.exists(config.MODEL_FILE):
+            print(f"CRITICAL: Model file not found at {config.MODEL_FILE}", file=sys.stderr)
+            raise FileNotFoundError(f"Model file not found: {config.MODEL_FILE}")
+            
+        print(f"Loading model from {config.MODEL_FILE}...", file=sys.stderr)
+        artifact = joblib.load(config.MODEL_FILE)
+        # Support both old format {model, features} and new {pipeline, features}
+        pipeline = artifact.get("pipeline") or artifact.get("model")
+        features = artifact["features"]
+        
+        if not os.path.exists(config.SCALER_FILE):
+            print(f"CRITICAL: Scaler file not found at {config.SCALER_FILE}", file=sys.stderr)
+            raise FileNotFoundError(f"Scaler file not found: {config.SCALER_FILE}")
+            
+        print(f"Loading scaler from {config.SCALER_FILE}...", file=sys.stderr)
+        scaler = joblib.load(config.SCALER_FILE)
+        return pipeline, scaler, features
+    except Exception as e:
+        print(f"CRITICAL ERROR LOADING MODEL: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        raise e
 
 
 def _build_feature_vector(home_stats: dict, away_stats: dict,
@@ -237,6 +253,11 @@ def index():
     # On Vercel: skip full team loading if it fails, but we've already tried _init_teams
     model_ready = os.path.exists(config.MODEL_FILE) and os.path.exists(config.SCALER_FILE)
     return render_template("index.html", teams=ALL_TEAMS, model_ready=model_ready)
+
+
+@app.route("/health")
+def health():
+    return jsonify({"status": "ok", "message": "NBA Playoff Predictor is running"}), 200
 
 
 @app.route("/api/upcoming")
