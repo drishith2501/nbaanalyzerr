@@ -10,31 +10,10 @@ import config
 import nba_utils
 import upcoming_games
 
-# Defer heavy imports to avoid slow startup
-_pd = None
-_np = None
-_joblib = None
+import pandas as pd
+import numpy as np
+import joblib
 
-def _ensure_pandas():
-    global _pd
-    if _pd is None:
-        import pandas as pd
-        _pd = pd
-    return _pd
-
-def _ensure_numpy():
-    global _np
-    if _np is None:
-        import numpy as np
-        _np = np
-    return _np
-
-def _ensure_joblib():
-    global _joblib
-    if _joblib is None:
-        import joblib
-        _joblib = joblib
-    return _joblib
 
 app = Flask(__name__)
 
@@ -179,8 +158,6 @@ def _build_feature_vector(home_stats: dict, away_stats: dict,
                            home_rest: int, away_rest: int,
                            home_seed: int, away_seed: int,
                            features: list):
-    pd = _ensure_pandas()
-    np = _ensure_numpy()
     
     row = {}
     for feat in config.TEAM_FEATURES:
