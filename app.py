@@ -243,6 +243,7 @@ def index():
 def api_upcoming():
     """Fetch real upcoming playoff games with caching and fallback."""
     print("--> Received request for /api/upcoming")
+    _init_teams()
     global _UPCOMING_CACHE
     force = request.args.get("force") == "1"
     

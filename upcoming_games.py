@@ -10,14 +10,19 @@ Returns structured game dicts ready for prediction.
 
 import time
 import datetime
-from zoneinfo import ZoneInfo
 import signal
 from contextlib import contextmanager
 
+try:
+    from zoneinfo import ZoneInfo
+    ET = ZoneInfo("America/New_York")
+except ImportError:
+    # Fallback for Python < 3.9 or missing tzdata
+    from datetime import timezone, timedelta
+    ET = timezone(timedelta(hours=-5))
+
 import config
 import nba_utils
-
-ET = ZoneInfo("America/New_York")
 
 # Playoff game IDs start with "004"
 PLAYOFF_PREFIX = "004"
