@@ -202,7 +202,7 @@ def _predict_game(home_abbr: str, away_abbr: str,
                   home_seed: int = 1, away_seed: int = 8,
                   season: str = "2025-26") -> dict:
     """Core prediction logic. Returns dict with probs and breakdown."""
-    pipeline, features = _load_model()
+    pipeline, scaler, features = _load_model()
     stats_df = _fetch_season_stats(season)
 
     home_row = stats_df[stats_df["TEAM_ABBREVIATION"] == home_abbr]
@@ -243,7 +243,7 @@ def _predict_game(home_abbr: str, away_abbr: str,
 @app.route("/health")
 def health():
     """Health check endpoint - responds immediately."""
-    return jsonify({"status": "ok"}), 200
+    return jsonify({"status": "ok", "message": "NBA Playoff Predictor is running"}), 200
 
 @app.route("/")
 def index():
@@ -255,9 +255,6 @@ def index():
     return render_template("index.html", teams=ALL_TEAMS, model_ready=model_ready)
 
 
-@app.route("/health")
-def health():
-    return jsonify({"status": "ok", "message": "NBA Playoff Predictor is running"}), 200
 
 
 @app.route("/api/upcoming")
