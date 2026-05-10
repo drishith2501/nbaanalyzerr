@@ -26,6 +26,7 @@ from nba_api.stats.endpoints import leaguedashteamstats
 from nba_api.stats.static import teams as nba_teams_static
 
 import config
+import nba_utils
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -35,7 +36,8 @@ TEAM_ABB_TO_NAME = {t["abbreviation"]: t["full_name"] for t in nba_teams_static.
 
 def _load_model():
     artifact = joblib.load(config.MODEL_FILE)
-    model    = artifact["model"]
+    # Support both 'pipeline' and 'model' keys
+    model = artifact.get("pipeline") or artifact.get("model")
     features = artifact["features"]
     scaler   = joblib.load(config.SCALER_FILE)
     return model, scaler, features
@@ -44,18 +46,25 @@ def _load_model():
 def _fetch_current_season_stats(season: str = "2024-25") -> pd.DataFrame:
     """Pull latest season advanced stats (regular season for baseline)."""
     print(f"  Fetching current team stats ({season})…")
-    endpoint = leaguedashteamstats.LeagueDashTeamStats(
-        season=season,
-        season_type_all_star="Regular Season",
-        measure_type_detailed_defense="Advanced",
-        per_mode_detailed="Per100Possessions",
-    )
-    time.sleep(config.REQUEST_DELAY)
-    df = endpoint.get_data_frames()[0]
-    # nba_api 1.11+ dropped TEAM_ABBREVIATION — add from static lookup
-    id_to_abbr = {t["id"]: t["abbreviation"] for t in nba_teams_static.get_teams()}
-    df["TEAM_ABBREVIATION"] = df["TEAM_ID"].map(id_to_abbr)
-    return df
+    try:
+        endpoint = nba_utils.fetch_with_retry(
+            leaguedashteamstats.LeagueDashTeamStats,
+            season=season,
+            season_type_all_star="Regular Season",
+            measure_type_detailed_defense="Advanced",
+            per_mode_detailed="Per100Possessions",
+        )
+        df = endpoint.get_data_frames()[0]
+        # nba_api 1.11+ dropped TEAM_ABBREVIATION — add from static lookup
+        id_to_abbr = {t["id"]: t["abbreviation"] for t in nba_teams_static.get_teams()}
+        df["TEAM_ABBREVIATION"] = df["TEAM_ID"].map(id_to_abbr)
+        return df
+    except Exception as e:
+        print(f"  [WARNING] API fetch failed: {e}. Trying fallback...")
+        df_fallback = nba_utils.get_team_stats_fallback(season)
+        if df_fallback is not None:
+            return df_fallback
+        raise e
 
 
 def _get_team_stats(abbr: str, stats_df: pd.DataFrame) -> dict:

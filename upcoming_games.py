@@ -15,6 +15,7 @@ import signal
 from contextlib import contextmanager
 
 import config
+import nba_utils
 
 ET = ZoneInfo("America/New_York")
 
@@ -45,15 +46,13 @@ def _parse_live_games(include_finished: bool = False) -> list[dict]:
         except (ValueError, AttributeError):
             pass  # signal.alarm not available on Windows/some systems
         
-        data = live_sb.ScoreBoard().get_dict()
+        data = nba_utils.fetch_with_retry(live_sb.ScoreBoard, timeout=3, max_retries=1).get_dict()
         games = data["scoreboard"]["games"]
         
         try:
             signal.alarm(0)  # Cancel alarm
         except (ValueError, AttributeError):
             pass
-        
-        time.sleep(config.REQUEST_DELAY)
     except Exception as exc:
         print(f"  Live API error: {exc}")
         return []
@@ -112,8 +111,13 @@ def _parse_future_games(days_ahead: int = 10) -> list[dict]:
             except (ValueError, AttributeError):
                 pass
             
-            sb3 = scoreboardv3.ScoreboardV3(game_date=date_str, league_id="00")
-            time.sleep(config.REQUEST_DELAY)
+            sb3 = nba_utils.fetch_with_retry(
+                scoreboardv3.ScoreboardV3,
+                game_date=date_str,
+                league_id="00",
+                timeout=3,
+                max_retries=1
+            )
             games = sb3.get_dict()["scoreboard"]["games"]
             
             try:
@@ -172,3 +176,12 @@ def get_upcoming_playoff_games(days_ahead: int = 10) -> list[dict]:
             unique.append(g)
 
     return sorted(unique, key=lambda x: x["date"])
+
+if __name__ == "__main__":
+    print("Fetching upcoming playoff games...")
+    games = get_upcoming_playoff_games()
+    if not games:
+        print("No upcoming playoff games found.")
+    else:
+        for g in games:
+            print(f"{g['date_label']}: {g['away_abbr']} @ {g['home_abbr']} - {g['status']}")

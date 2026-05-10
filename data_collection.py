@@ -23,21 +23,13 @@ from nba_api.stats.endpoints import (
 from nba_api.stats.static import teams as nba_teams_static
 
 import config
+import nba_utils
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 def _safe_get(endpoint_fn, *args, **kwargs):
     """Call an nba_api endpoint and retry once on transient failure."""
-    for attempt in range(3):
-        try:
-            result = endpoint_fn(*args, **kwargs)
-            time.sleep(config.REQUEST_DELAY)
-            return result
-        except Exception as exc:
-            wait = config.REQUEST_DELAY * (attempt + 2)
-            print(f"  ⚠  Attempt {attempt+1} failed ({exc}). Retrying in {wait}s…")
-            time.sleep(wait)
-    raise RuntimeError(f"Failed after 3 attempts: {endpoint_fn}")
+    return nba_utils.fetch_with_retry(endpoint_fn, **kwargs)
 
 
 # ── 1. Advanced team stats per season ─────────────────────────────────────────

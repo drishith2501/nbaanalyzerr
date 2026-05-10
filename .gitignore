@@ -13,6 +13,7 @@ ENV/
 Thumbs.db
 
 # Project specific
-data/raw_*.csv
+data/raw_game_log.csv
+!data/raw_team_stats.csv
 # (You can leave processed_dataset.csv if you want the deployed model to use it,
 # but usually it's better to push the trained models instead of raw data)
