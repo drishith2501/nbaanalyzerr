@@ -1,5 +1,5 @@
 """
-Vercel serverless WSGI application
+Vercel serverless WSGI application (v2)
 Returns hardcoded data immediately to avoid NBA API timeouts
 """
 import json
