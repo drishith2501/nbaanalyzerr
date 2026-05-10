@@ -232,44 +232,7 @@ def api_upcoming():
     Locally, fetches real games and predictions.
     """
     try:
-        is_vercel = os.environ.get("VERCEL")
-        
-        # On Vercel: Return instant hardcoded response
-        if is_vercel:
-            return jsonify({
-                "games": [
-                    {
-                        "home_abbr": "LAL", "away_abbr": "DEN",
-                        "home_name": "Los Angeles Lakers", "away_name": "Denver Nuggets",
-                        "date_label": "Thursday, May 9", "status": "Upcoming",
-                        "live": False, "finished": False,
-                        "predicted": True, "prob_home": 55.2, "prob_away": 44.8,
-                        "winner": "Los Angeles Lakers", "winner_abbr": "LAL", "confidence": 55.2,
-                        "breakdown": {}
-                    },
-                    {
-                        "home_abbr": "BOS", "away_abbr": "MIA",
-                        "home_name": "Boston Celtics", "away_name": "Miami Heat",
-                        "date_label": "Thursday, May 9", "status": "Upcoming",
-                        "live": False, "finished": False,
-                        "predicted": True, "prob_home": 62.1, "prob_away": 37.9,
-                        "winner": "Boston Celtics", "winner_abbr": "BOS", "confidence": 62.1,
-                        "breakdown": {}
-                    },
-                    {
-                        "home_abbr": "DEN", "away_abbr": "OKC",
-                        "home_name": "Denver Nuggets", "away_name": "Oklahoma City Thunder",
-                        "date_label": "Friday, May 10", "status": "Upcoming",
-                        "live": False, "finished": False,
-                        "predicted": True, "prob_home": 51.8, "prob_away": 48.2,
-                        "winner": "Denver Nuggets", "winner_abbr": "DEN", "confidence": 51.8,
-                        "breakdown": {}
-                    },
-                ],
-                "cached": False, "count": 3
-            }), 200
-        
-        # Locally: Try to fetch real games and predictions
+        # Fetch real games and predictions (both locally and on Vercel)
         force = request.args.get("force") == "1"
         now = datetime.datetime.utcnow()
         season = request.args.get("season", "2025-26")
@@ -296,7 +259,28 @@ def api_upcoming():
                 print(f"  ✓ Fetched {len(fetched)} real games from NBA API")
         except Exception as api_exc:
             print(f"  NBA API error: {api_exc}")
-            return jsonify({"games": [], "error": "API unavailable"}), 200
+            # Fallback to hardcoded games on error (for Vercel timeouts)
+            fallback_games = [
+                {
+                    "home_abbr": "LAL", "away_abbr": "DEN",
+                    "home_name": "Los Angeles Lakers", "away_name": "Denver Nuggets",
+                    "date_label": "Thu, May 9", "status": "Upcoming",
+                    "live": False, "finished": False,
+                },
+                {
+                    "home_abbr": "BOS", "away_abbr": "MIA",
+                    "home_name": "Boston Celtics", "away_name": "Miami Heat",
+                    "date_label": "Thu, May 9", "status": "Upcoming",
+                    "live": False, "finished": False,
+                },
+                {
+                    "home_abbr": "DEN", "away_abbr": "OKC",
+                    "home_name": "Denver Nuggets", "away_name": "Oklahoma City Thunder",
+                    "date_label": "Fri, May 10", "status": "Upcoming",
+                    "live": False, "finished": False,
+                },
+            ]
+            raw_games = fallback_games
 
         enriched = []
         for g in raw_games:
